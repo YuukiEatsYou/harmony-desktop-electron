@@ -12,7 +12,7 @@ const fs = require('node:fs');
 const http = require('node:http');
 const os = require('node:os');
 const path = require('node:path');
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, Menu } = require('electron');
 
 // Keep the test hermetic: never touch the user's real servers.json.
 const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'harmony-smoke-'));
@@ -23,11 +23,14 @@ const PNG_1X1 = Buffer.from(
   'base64',
 );
 
-// The unread channel is what the shell's injected observer counts, so the guest
-// reports a badge of 1.
+// One channel that is merely unread, and one holding an unread mention or
+// reply. The shell's injected observer counts only the latter, so the guest
+// must report a badge of 1 (not 2).
 const PAGE_HTML =
-  '<!doctype html><html><head><title>Fake Harmony</title></head>' +
-  '<body><div class="channel unread"></div></body></html>';
+  '<!doctype html><html><head><title>Fake Harmony</title></head><body>' +
+  '<div class="channel unread"></div>' +
+  '<div class="channel unread"><span class="mention-dot"></span></div>' +
+  '</body></html>';
 
 const hits = { meta: 0, icon: 0, page: 0 };
 const fakeServer = http.createServer((request, response) => {
@@ -213,6 +216,10 @@ void app.whenReady().then(async () => {
   await new Promise((resolve) => fakeServer.listen(0, '127.0.0.1', resolve));
   const { port } = /** @type {import('node:net').AddressInfo} */ (fakeServer.address());
   const baseUrl = `http://127.0.0.1:${port}`;
+
+  if (process.platform !== 'darwin' && Menu.getApplicationMenu() !== null) {
+    fail('the default application menu was not removed');
+  }
 
   const window = await waitForWindow();
   if (!window) {

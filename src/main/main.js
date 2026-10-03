@@ -2,7 +2,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { app, BrowserWindow, protocol, shell } = require('electron');
+const { app, BrowserWindow, Menu, protocol, shell } = require('electron');
 const { ServerStore } = require('./servers');
 const { registerIpc } = require('./ipc');
 
@@ -34,6 +34,23 @@ app.on('session-created', (session) => {
     callback(ALLOWED_PERMISSIONS.has(permission));
   });
 });
+
+/**
+ * Drop the default File/Edit/View/Window menu bar. On macOS the menu lives in
+ * the system menu bar rather than the window, and copy/paste depend on the edit
+ * roles, so there we keep a minimal standard menu instead.
+ */
+function configureApplicationMenu() {
+  if (process.platform === 'darwin') {
+    Menu.setApplicationMenu(
+      Menu.buildFromTemplate([{ role: 'appMenu' }, { role: 'editMenu' }, { role: 'windowMenu' }]),
+    );
+  } else {
+    Menu.setApplicationMenu(null);
+  }
+}
+
+configureApplicationMenu();
 
 /**
  * The renderer asks for webviews, so we never trust the attributes it sets.

@@ -25,8 +25,9 @@ const unread = new Map();
 
 /**
  * Injected into each guest on load. Harmony has no title or badge of its own,
- * but it marks unread channels with `.channel.unread`, so we mirror that count
- * into `document.title`, which the shell reads back via `page-title-updated`.
+ * but it draws a `.mention-dot` in every channel holding an unread mention or
+ * reply. We mirror that count into `document.title`, which the shell reads back
+ * via `page-title-updated`.
  */
 const UNREAD_SCRIPT = `(() => {
   if (window.__harmonyUnread) return;
@@ -36,7 +37,7 @@ const UNREAD_SCRIPT = `(() => {
   let scheduled = false;
   const update = () => {
     scheduled = false;
-    const count = document.querySelectorAll('.channel.unread').length;
+    const count = document.querySelectorAll('.channel .mention-dot').length;
     if (count === last) return;
     last = count;
     document.title = count > 0 ? '(' + count + ') ' + base : base;
