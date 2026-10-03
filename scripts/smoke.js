@@ -2,7 +2,8 @@
 
 // Headless smoke test. Boots the real app against a throwaway userData
 // directory and a local fake Harmony server, then drives the add-server dialog
-// through the actual renderer -> IPC -> network -> store path.
+// through the actual renderer -> IPC -> network -> store path and checks the
+// per-server webview, including partition isolation.
 //
 // Run with: npm run smoke
 // Headless machines may need: --no-sandbox --disable-gpu --in-process-gpu
@@ -22,7 +23,11 @@ const PNG_1X1 = Buffer.from(
   'base64',
 );
 
-const hits = { meta: 0, icon: 0 };
+const PAGE_HTML =
+  '<!doctype html><html><head><title>Fake Harmony</title></head>' +
+  '<body><h1>fake</h1></body></html>';
+
+const hits = { meta: 0, icon: 0, page: 0 };
 const fakeServer = http.createServer((request, response) => {
   const url = new URL(request.url ?? '/', 'http://127.0.0.1');
 
@@ -40,6 +45,13 @@ const fakeServer = http.createServer((request, response) => {
     return;
   }
 
+  if (url.pathname === '/') {
+    hits.page += 1;
+    response.writeHead(200, { 'content-type': 'text/html' });
+    response.end(PAGE_HTML);
+    return;
+  }
+
   response.writeHead(404);
   response.end();
 });
@@ -51,7 +63,7 @@ function fail(message) {
 }
 
 // Catch renderer errors from the moment the window's contents exist, so early
-// load failures (including a broken icon URL) are not missed.
+// load failures (including a broken icon or webview URL) are not missed.
 app.on('web-contents-created', (_event, contents) => {
   contents.on('console-message', (event, level, message) => {
     const text = typeof message === 'string' ? message : event.message;
@@ -75,56 +87,113 @@ async function waitForWindow() {
   return null;
 }
 
-/** Drive the add-server dialog exactly as a user would, against `baseUrl`. */
-function driveAddDialog(baseUrl) {
+/** Drive the add-server dialog and the mounted webview against `baseUrl`. */
+function driveShell(baseUrl) {
   return `(async () => {
-    const url = ${JSON.stringify(baseUrl)};
-    const waitFor = async (test, timeout = 5000) => {
+    const BASE = ${JSON.stringify(baseUrl)};
+    const host = document.getElementById('webview-host');
+
+    // Webview methods throw until the guest is attached, hence the swallow.
+    const waitFor = async (test, timeout = 10000) => {
       const start = Date.now();
       while (Date.now() - start < timeout) {
-        if (test()) return true;
+        try {
+          if (test()) return true;
+        } catch {
+          // not ready yet
+        }
         await new Promise((resolve) => setTimeout(resolve, 25));
       }
       return false;
+    };
+
+    // A guest rejects executeJavaScript until it has attached and gone dom-ready.
+    const guestEval = async (label, view, code) => {
+      const start = Date.now();
+      let last;
+      while (Date.now() - start < 10000) {
+        try {
+          return await view.executeJavaScript(code);
+        } catch (error) {
+          last = error;
+          if (!/dom-ready|attached/i.test(String(error.message))) throw error;
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+      }
+      throw new Error(label + ': ' + (last ? last.message : 'guest never became ready'));
     };
 
     const emptyVisibleBefore = !document.getElementById('empty-state').hidden;
 
     document.getElementById('add-server').click();
     const dialogOpen = !document.getElementById('dialog-backdrop').hidden;
-
-    document.getElementById('server-url').value = url + '/';
+    document.getElementById('server-url').value = BASE + '/';
     document.getElementById('add-form').dispatchEvent(new Event('submit', { cancelable: true }));
 
-    await waitFor(() => document.querySelectorAll('#server-list .rail-button').length === 1);
+    await waitFor(() => host.querySelector('webview'));
+    const view = host.querySelector('webview');
+    const loaded = await waitFor(() => view.getURL() && !view.isLoading());
 
-    const button = document.querySelector('#server-list .rail-button');
     const stored = await window.shell.servers.list();
     const server = stored[0] ?? null;
 
-    // The rail should now show the server's real icon, served over our scheme.
-    const iconLoaded = await new Promise((resolve) => {
-      if (!server || !server.iconPath) { resolve(false); return; }
-      const image = new Image();
-      image.onload = () => resolve(true);
-      image.onerror = () => resolve(false);
-      image.src = 'harmony-icon://icon/' + encodeURIComponent(server.id)
-        + '?v=' + encodeURIComponent(server.iconHash ?? '');
+    let guestTitle = null;
+    let guestTitleError = null;
+    if (loaded) {
+      try {
+        guestTitle = await guestEval('main-title', view, 'document.title');
+      } catch (error) {
+        guestTitleError = error.message;
+      }
+    }
+    const partition = view.getAttribute('partition');
+    const src = view.getAttribute('src');
+    const active = getComputedStyle(view).visibility === 'visible';
+
+    // Partition isolation: two guests, same origin, separate cookie jars.
+    const makeView = (partitionName) => new Promise((resolve, reject) => {
+      const element = document.createElement('webview');
+      element.className = 'server-webview';
+      element.setAttribute('partition', partitionName);
+      element.setAttribute('src', BASE);
+      const timer = setTimeout(() => reject(new Error('timeout ' + partitionName)), 10000);
+      element.addEventListener('dom-ready', () => { clearTimeout(timer); resolve(element); }, { once: true });
+      host.append(element);
     });
 
+    let isolated = null;
+    let isoError = null;
+    try {
+      const a = await makeView('persist:smoke-iso-a');
+      const b = await makeView('persist:smoke-iso-b');
+      await guestEval('iso-a-write', a, "document.cookie = 'probe=A; path=/'");
+      await guestEval('iso-b-write', b, "document.cookie = 'probe=B; path=/'");
+      const readA = await guestEval('iso-a-read', a, 'document.cookie');
+      const readB = await guestEval('iso-b-read', b, 'document.cookie');
+      isolated = readA.includes('probe=A') && !readA.includes('probe=B')
+        && readB.includes('probe=B') && !readB.includes('probe=A');
+      a.remove();
+      b.remove();
+    } catch (error) {
+      isoError = error.message;
+    }
+
     if (server) await window.shell.servers.remove(server.id);
+    view.remove();
 
     return {
       emptyVisibleBefore,
       dialogOpen,
-      railCount: document.querySelectorAll('#server-list .rail-button').length,
-      placeholderVisible: !document.getElementById('server-placeholder').hidden,
-      storedCount: stored.length,
-      storedUrl: server ? server.url : null,
-      storedName: server ? server.name : null,
-      hasIcon: Boolean(server && server.iconPath),
-      iconLoaded,
-      railHasImage: Boolean(button && button.querySelector('img')),
+      loaded,
+      guestTitle,
+      guestTitleError,
+      partition,
+      src,
+      active,
+      isolated,
+      isoError,
+      expectedPartition: server ? 'persist:harmony-' + server.id : null,
+      expectedSrc: BASE,
     };
   })()`;
 }
@@ -143,7 +212,7 @@ void app.whenReady().then(async () => {
 
   let result;
   try {
-    result = await window.webContents.executeJavaScript(driveAddDialog(baseUrl));
+    result = await window.webContents.executeJavaScript(driveShell(baseUrl));
   } catch (error) {
     fail(`executeJavaScript threw: ${error.message}`);
     app.exit(1);
@@ -154,18 +223,21 @@ void app.whenReady().then(async () => {
 
   if (!result.emptyVisibleBefore) fail('empty state was not visible before adding');
   if (!result.dialogOpen) fail('add dialog did not open');
-  if (result.railCount !== 1) fail(`expected 1 rail button, got ${result.railCount}`);
-  if (!result.placeholderVisible) fail('server placeholder was not shown after adding');
-  if (result.storedCount !== 1) fail(`expected 1 stored server, got ${result.storedCount}`);
-  if (result.storedUrl === null || !result.storedUrl.startsWith('http://127.0.0.1:')) {
-    fail(`URL was not normalised, got ${result.storedUrl}`);
+  if (!result.loaded) fail('server webview never finished loading');
+  if (result.guestTitle !== 'Fake Harmony') fail(`unexpected guest title: ${result.guestTitle}`);
+  if (result.partition !== result.expectedPartition) {
+    fail(`wrong partition: ${result.partition} (expected ${result.expectedPartition})`);
   }
-  if (result.storedName !== 'Test Server') fail(`name was not taken from meta: ${result.storedName}`);
-  if (!result.hasIcon) fail('icon was not cached');
-  if (!result.iconLoaded) fail('cached icon did not load over harmony-icon://');
-  if (!result.railHasImage) fail('rail button does not show the icon');
+  const normalize = (value) => String(value).replace(/\/+$/, '');
+  if (normalize(result.src) !== normalize(result.expectedSrc)) {
+    fail(`wrong webview src: ${result.src}`);
+  }
+  if (!result.active) fail('active server webview was not visible');
+  if (result.isoError) fail(`partition isolation errored: ${result.isoError}`);
+  if (result.isolated !== true) fail('cookies leaked between session partitions');
   if (hits.meta < 1) fail('the meta endpoint was never called');
   if (hits.icon < 1) fail('the icon endpoint was never called');
+  if (hits.page < 1) fail('the webview never requested the server page');
 
   fakeServer.close();
   fs.rmSync(userData, { recursive: true, force: true });

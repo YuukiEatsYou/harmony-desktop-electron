@@ -2,17 +2,38 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { app, BrowserWindow, protocol } = require('electron');
+const { app, BrowserWindow, protocol, shell } = require('electron');
 const { ServerStore } = require('./servers');
 const { registerIpc } = require('./ipc');
 
 const ICON_SCHEME = 'harmony-icon';
+
+// Permissions a loaded server may have. Everything else (camera, microphone,
+// geolocation, ...) is refused: a chat server has no business asking.
+const ALLOWED_PERMISSIONS = new Set(['notifications']);
 
 // Must run before the app is ready. Marking the scheme standard and secure lets
 // it behave like http for the renderer and satisfy the page's CSP.
 protocol.registerSchemesAsPrivileged([
   { scheme: ICON_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true } },
 ]);
+
+// Server webviews may only open links in the user's real browser, never a new
+// Electron window.
+app.on('web-contents-created', (_event, contents) => {
+  if (contents.getType() !== 'webview') return;
+  contents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith('https://') || url.startsWith('http://')) void shell.openExternal(url);
+    return { action: 'deny' };
+  });
+});
+
+// Every session includes the per-server partitions, so this covers them all.
+app.on('session-created', (session) => {
+  session.setPermissionRequestHandler((_contents, permission, callback) => {
+    callback(ALLOWED_PERMISSIONS.has(permission));
+  });
+});
 
 /**
  * The renderer asks for webviews, so we never trust the attributes it sets.

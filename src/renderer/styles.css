@@ -141,12 +141,14 @@ body {
 #empty-state {
   position: absolute;
   inset: 0;
+  z-index: 2;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 8px;
   text-align: center;
+  background: var(--content-bg);
 }
 
 #empty-state h1 {
@@ -174,18 +176,49 @@ body {
   filter: brightness(1.1);
 }
 
-#server-placeholder {
+/* --- Server webviews ----------------------------------------------------- */
+
+/* Guests paint above ordinary HTML in Electron, so overlays hide the webviews
+   rather than trying to stack on top of them. */
+#webview-host {
   position: absolute;
   inset: 0;
+  z-index: 0;
+}
+
+.server-webview {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  visibility: hidden;
+}
+
+.server-webview.is-active {
+  visibility: visible;
+}
+
+/* A failed server, and the add-server dialog, must cover the active guest. */
+.server-webview.is-failed,
+body.modal-open .server-webview {
+  visibility: hidden !important;
+}
+
+#load-error {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 8px;
   text-align: center;
+  background: var(--content-bg);
 }
 
-#server-placeholder h1 {
+#load-error h1 {
   font-size: 20px;
   margin: 0;
 }
