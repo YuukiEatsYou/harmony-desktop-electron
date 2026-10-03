@@ -1,0 +1,15 @@
+{
+  "name": "harmony-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Electron desktop client for Harmony, with support for many servers at once.",
+  "license": "AGPL-3.0-or-later",
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "smoke": "electron scripts/smoke.js"
+  },
+  "devDependencies": {
+    "electron": "^44.5.1"
+  }
+}

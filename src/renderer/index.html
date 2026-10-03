@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Harmony</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div id="app">
+      <nav id="server-rail" aria-label="Servers">
+        <ul id="server-list"></ul>
+        <button id="add-server" class="rail-button rail-add" title="Add a server" aria-label="Add a server">
+          +
+        </button>
+      </nav>
+
+      <main id="content">
+        <section id="empty-state">
+          <h1>No server selected</h1>
+          <p>Add a Harmony server to get started.</p>
+          <button id="empty-add" class="primary-button">Add a server</button>
+        </section>
+      </main>
+    </div>
+
+    <script src="shell.js"></script>
+  </body>
+</html>
