@@ -8,7 +8,7 @@
   "scripts": {
     "start": "electron .",
     "smoke": "electron scripts/smoke.js",
-    "test:store": "node scripts/store-test.js"
+    "test": "node scripts/store-test.js && node scripts/harmony-test.js"
   },
   "devDependencies": {
     "electron": "^44.5.1"

@@ -30,6 +30,12 @@ function initials(name) {
   return words.map((word) => word[0] ?? '').join('').toUpperCase() || '?';
 }
 
+/** Cached icon served by the main process; the hash busts the cache on change. */
+function iconUrl(server) {
+  const version = encodeURIComponent(server.iconHash ?? '');
+  return `harmony-icon://icon/${encodeURIComponent(server.id)}?v=${version}`;
+}
+
 function render() {
   listElement.replaceChildren();
 
@@ -45,7 +51,7 @@ function render() {
 
     if (server.iconPath) {
       const image = document.createElement('img');
-      image.src = server.iconPath;
+      image.src = iconUrl(server);
       image.alt = '';
       button.append(image);
     } else {
@@ -99,19 +105,33 @@ function closeDialog() {
   dialogBackdrop.hidden = true;
 }
 
+const submitButton = addForm.querySelector('button[type="submit"]');
+
 addForm.addEventListener('submit', async (event) => {
   event.preventDefault();
+  if (submitButton.disabled) return;
 
-  const result = await window.shell.servers.add({ url: urlInput.value });
-  if (!result.ok) {
-    dialogError.textContent = result.error;
-    dialogError.hidden = false;
-    return;
+  dialogError.hidden = true;
+  submitButton.disabled = true;
+  const label = submitButton.textContent;
+  submitButton.textContent = 'Adding…';
+
+  try {
+    // The main process contacts the server, so this can take a moment.
+    const result = await window.shell.servers.add({ url: urlInput.value });
+    if (!result.ok) {
+      dialogError.textContent = result.error;
+      dialogError.hidden = false;
+      return;
+    }
+
+    servers.push(result.server);
+    closeDialog();
+    select(result.server.id);
+  } finally {
+    submitButton.disabled = false;
+    submitButton.textContent = label;
   }
-
-  servers.push(result.server);
-  closeDialog();
-  select(result.server.id);
 });
 
 document.getElementById('dialog-cancel').addEventListener('click', closeDialog);

@@ -1,12 +1,22 @@
 'use strict';
 
+const fs = require('node:fs');
 const path = require('node:path');
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, protocol } = require('electron');
 const { ServerStore } = require('./servers');
+const { registerIpc } = require('./ipc');
+
+const ICON_SCHEME = 'harmony-icon';
+
+// Must run before the app is ready. Marking the scheme standard and secure lets
+// it behave like http for the renderer and satisfy the page's CSP.
+protocol.registerSchemesAsPrivileged([
+  { scheme: ICON_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true } },
+]);
 
 /**
  * The renderer asks for webviews, so we never trust the attributes it sets.
- * Whatever it requests, a harnessed webview gets a sandbox, no Node, no preload
+ * Whatever it requests, a hardened webview gets a sandbox, no Node, no preload
  * and the same-origin policy. This is our last line of defence against a
  * compromised renderer escalating through an attached guest.
  *
@@ -57,28 +67,47 @@ function createWindow() {
   return window;
 }
 
+/**
+ * Serves cached icons to the renderer as `harmony-icon://icon/<id>?v=<hash>`.
+ * Anything unknown or unreadable is a plain 404, so a missing icon quietly
+ * falls back to the initials the renderer draws.
+ *
+ * @param {import('./servers').ServerStore} store
+ */
+function registerIconProtocol(store) {
+  protocol.handle(ICON_SCHEME, (request) => {
+    let id;
+    try {
+      id = decodeURIComponent(new URL(request.url).pathname.replace(/^\/+/, ''));
+    } catch {
+      return new Response(null, { status: 400 });
+    }
+
+    const server = store.get(id);
+    if (!server?.iconPath) return new Response(null, { status: 404 });
+
+    try {
+      return new Response(fs.readFileSync(server.iconPath), {
+        headers: { 'content-type': 'image/png' },
+      });
+    } catch {
+      return new Response(null, { status: 404 });
+    }
+  });
+}
+
 void app.whenReady().then(() => {
-  const store = new ServerStore(app.getPath('userData'));
-  registerServerIpc(store);
+  const userData = app.getPath('userData');
+  const store = new ServerStore(userData);
+
+  registerIpc(store, path.join(userData, 'icons'));
+  registerIconProtocol(store);
   createWindow();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 });
-
-/**
- * The server-management surface the renderer is allowed to call. Every handler
- * returns a plain value so a rejected promise (and its Electron stack noise)
- * never crosses the bridge.
- *
- * @param {import('./servers').ServerStore} store
- */
-function registerServerIpc(store) {
-  ipcMain.handle('servers:list', () => store.list());
-  ipcMain.handle('servers:add', (_event, input) => store.add(input ?? {}));
-  ipcMain.handle('servers:remove', (_event, id) => store.remove(String(id)));
-}
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();

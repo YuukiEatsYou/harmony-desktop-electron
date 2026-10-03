@@ -51,6 +51,20 @@ try {
   assert.equal(bad.ok, false);
   assert.match(bad.error, /address/i);
 
+  // --- Icon fields, get and update -----------------------------------------
+  const iconServer = store.add({ url: 'icons.example.com', iconHash: 'h1' });
+  assert.equal(iconServer.ok, true);
+  assert.equal(iconServer.server.iconHash, 'h1');
+  assert.equal(iconServer.server.iconPath, null);
+  assert.equal(store.get(iconServer.server.id).iconHash, 'h1');
+
+  const patched = store.update(iconServer.server.id, { iconPath: '/tmp/x.png' });
+  assert.equal(patched.iconPath, '/tmp/x.png');
+  assert.equal(store.get(iconServer.server.id).iconPath, '/tmp/x.png');
+  assert.equal(store.get('missing'), null);
+  assert.equal(store.update('missing', { name: 'x' }), null);
+  assert.equal(store.remove(iconServer.server.id), true);
+
   assert.equal(store.list().length, 2);
 
   // --- Persistence ----------------------------------------------------------

@@ -113,7 +113,32 @@ class ServerStore {
   }
 
   /**
-   * @param {{ url?: string, name?: string }} input
+   * @param {string} id
+   * @returns {Server | null}
+   */
+  get(id) {
+    const server = this.#servers.find((candidate) => candidate.id === id);
+    return server ? { ...server } : null;
+  }
+
+  /**
+   * Merge a patch into a stored server. Used to attach a cached icon after the
+   * metadata fetch, once the record and its id already exist.
+   *
+   * @param {string} id
+   * @param {Partial<Omit<Server, 'id'>>} patch
+   * @returns {Server | null}
+   */
+  update(id, patch) {
+    const index = this.#servers.findIndex((server) => server.id === id);
+    if (index === -1) return null;
+    this.#servers[index] = { ...this.#servers[index], ...patch, id };
+    this.#write();
+    return { ...this.#servers[index] };
+  }
+
+  /**
+   * @param {{ url?: string, name?: string, iconHash?: string | null, iconPath?: string | null }} input
    * @returns {{ ok: true, server: Server } | { ok: false, error: string }}
    */
   add(input) {
@@ -133,8 +158,8 @@ class ServerStore {
       id: randomUUID(),
       url,
       name: (input.name ?? '').trim() || new URL(url).host,
-      iconHash: null,
-      iconPath: null,
+      iconHash: typeof input.iconHash === 'string' ? input.iconHash : null,
+      iconPath: typeof input.iconPath === 'string' ? input.iconPath : null,
       addedAt: new Date().toISOString(),
     };
 
