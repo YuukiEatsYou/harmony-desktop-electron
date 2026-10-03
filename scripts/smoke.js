@@ -14,9 +14,20 @@ const os = require('node:os');
 const path = require('node:path');
 const { app, BrowserWindow, Menu } = require('electron');
 
-// Keep the test hermetic: never touch the user's real servers.json.
-const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'harmony-smoke-'));
+// Keep the test hermetic. The appData root is redirected too, not just the
+// data directory, so the legacy-data migration cannot pull in the user's real
+// servers from their actual appData location.
+const appData = fs.mkdtempSync(path.join(os.tmpdir(), 'harmony-smoke-'));
+app.setPath('appData', appData);
+const userData = path.join(appData, 'Harmony');
 app.setPath('userData', userData);
+
+// Leave data behind under the old app name so the rename migration is
+// exercised. The list is empty, so it does not change what the driver sees.
+const legacyData = path.join(appData, 'harmony-desktop');
+fs.mkdirSync(path.join(legacyData, 'icons'), { recursive: true });
+fs.writeFileSync(path.join(legacyData, 'servers.json'), JSON.stringify({ version: 1, servers: [] }));
+fs.writeFileSync(path.join(legacyData, 'icons', 'marker.txt'), 'x');
 
 const PNG_1X1 = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
@@ -221,6 +232,13 @@ void app.whenReady().then(async () => {
     fail('the default application menu was not removed');
   }
 
+  if (!fs.existsSync(path.join(userData, 'servers.json'))) {
+    fail('the legacy server list was not migrated');
+  }
+  if (!fs.existsSync(path.join(userData, 'icons', 'marker.txt'))) {
+    fail('the legacy icons were not migrated');
+  }
+
   const window = await waitForWindow();
   if (!window) {
     fail('no window became ready');
@@ -264,7 +282,7 @@ void app.whenReady().then(async () => {
   if (hits.page < 1) fail('the webview never requested the server page');
 
   fakeServer.close();
-  fs.rmSync(userData, { recursive: true, force: true });
+  fs.rmSync(appData, { recursive: true, force: true });
   console.log(failed ? 'SMOKE FAILED' : 'SMOKE PASSED');
   app.exit(failed ? 1 : 0);
 });

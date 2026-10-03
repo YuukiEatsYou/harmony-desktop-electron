@@ -73,6 +73,9 @@ function hardenWebview(_event, webPreferences) {
 }
 
 function createWindow() {
+  // Packaged builds get their icon from the bundle; this covers development.
+  const windowIcon = path.join(__dirname, '..', '..', 'build', 'icon.png');
+
   /** @type {BrowserWindow} */
   const window = new BrowserWindow({
     width: 1200,
@@ -81,6 +84,7 @@ function createWindow() {
     minHeight: 560,
     backgroundColor: '#1a1b1e',
     show: false,
+    icon: fs.existsSync(windowIcon) ? windowIcon : undefined,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -134,7 +138,35 @@ function registerIconProtocol(store) {
   });
 }
 
+/**
+ * Up to now the app was named `harmony-desktop`, so Electron kept its data in a
+ * directory of that name. Carry the server list (and cached icons) over to the
+ * new `Harmony` directory the first time the renamed app starts.
+ */
+function migrateLegacyUserData() {
+  const legacy = path.join(app.getPath('appData'), 'harmony-desktop');
+  const current = app.getPath('userData');
+  if (legacy === current) return;
+
+  const source = path.join(legacy, 'servers.json');
+  const destination = path.join(current, 'servers.json');
+  if (!fs.existsSync(source) || fs.existsSync(destination)) return;
+
+  try {
+    fs.mkdirSync(current, { recursive: true });
+    fs.copyFileSync(source, destination);
+    const legacyIcons = path.join(legacy, 'icons');
+    if (fs.existsSync(legacyIcons)) {
+      fs.cpSync(legacyIcons, path.join(current, 'icons'), { recursive: true });
+    }
+    console.info(`Migrated the previous server list from ${legacy}.`);
+  } catch (error) {
+    console.error('Could not migrate the previous server list:', error);
+  }
+}
+
 void app.whenReady().then(() => {
+  migrateLegacyUserData();
   const userData = app.getPath('userData');
   const store = new ServerStore(userData);
 

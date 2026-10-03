@@ -1,16 +1,58 @@
 {
-  "name": "harmony-desktop",
+  "name": "harmony",
+  "productName": "Harmony",
+  "desktopName": "harmony.desktop",
   "version": "0.1.0",
   "private": true,
-  "description": "Electron desktop client for Harmony, with support for many servers at once.",
+  "description": "Desktop client for Harmony, connecting to many self-hosted servers at once.",
   "license": "AGPL-3.0-or-later",
+  "author": {
+    "name": "YuukiEatsYou",
+    "email": "heinrichtester4@gmail.com"
+  },
   "main": "src/main/main.js",
   "scripts": {
     "start": "electron .",
     "smoke": "electron scripts/smoke.js",
-    "test": "node scripts/store-test.js && node scripts/harmony-test.js"
+    "test": "node scripts/store-test.js && node scripts/harmony-test.js",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder"
   },
   "devDependencies": {
-    "electron": "^44.5.1"
+    "electron": "^44.5.1",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "org.harmony.Harmony",
+    "productName": "Harmony",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "artifactName": "${productName}-${version}-${arch}.${ext}",
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Network",
+      "synopsis": "Multi-server desktop client for Harmony",
+      "syncDesktopName": true
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.social-networking"
+    }
   }
 }
