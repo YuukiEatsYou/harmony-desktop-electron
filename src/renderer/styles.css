@@ -173,3 +173,107 @@ body {
 .primary-button:hover {
   filter: brightness(1.1);
 }
+
+#server-placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  text-align: center;
+}
+
+#server-placeholder h1 {
+  font-size: 20px;
+  margin: 0;
+}
+
+.dim {
+  color: var(--text-dim);
+  margin: 0;
+}
+
+/* --- Add-server dialog --------------------------------------------------- */
+
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgb(0 0 0 / 55%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dialog {
+  width: 380px;
+  max-width: calc(100vw - 48px);
+  background: #232428;
+  border-radius: 12px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-shadow: 0 12px 40px rgb(0 0 0 / 45%);
+}
+
+.dialog h2 {
+  margin: 0 0 4px;
+  font-size: 18px;
+}
+
+.dialog label {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--text-dim);
+}
+
+.dialog input {
+  background: #1a1b1e;
+  border: 1px solid #3a3d43;
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: var(--text);
+  font-size: 14px;
+  font-family: inherit;
+  outline: none;
+}
+
+.dialog input:focus {
+  border-color: var(--accent);
+}
+
+.dialog-error {
+  margin: 0;
+  color: #f06b6b;
+  font-size: 13px;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.ghost-button {
+  background: transparent;
+  color: var(--text);
+  border: none;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ghost-button:hover {
+  text-decoration: underline;
+}
+
+[hidden] {
+  display: none !important;
+}

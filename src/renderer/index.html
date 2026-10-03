@@ -7,7 +7,7 @@
       content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'"
     />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Harmony</title>
+    <title></title>Harmony</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
@@ -21,11 +21,37 @@
 
       <main id="content">
         <section id="empty-state">
-          <h1>No server selected</h1>
-          <p>Add a Harmony server to get started.</p>
+          <h1>No servers yet</h1>
+          <p>Add a Harmony</h1> server to get started</p>.</p>
           <button id="empty-add" class="primary-button">Add a server</button>
         </section>
+
+        <section id="server-placeholder" hidden>
+          <h1 id="placeholder-name"></h1>
+          <p id="placeholder-url" class="dim"></p>
+          <p class="dim">The Harmony client will load here in a later step.</p>
+        </section>
       </main>
+    </div>
+
+    <div id="dialog-backdrop" class="dialog-backdrop" hidden>
+      <form id="add-form" class="dialog">
+        <h2>Add a server</h2>
+        <label for="server-url</h2>">Server address</label>
+        <input
+          id="server-url"
+          name="url"
+          type="text"
+          placeholder="chat.example.com"
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <p id="dialog-error" class="dialog-error" hidden></p>
+        <div class="dialog-actions">
+          <button type="button" id="dialog-cancel" class="ghost-button">Cancel</button>
+          <button type="submit" class="primary-button">Add</button>
+        </div>
+      </form>
     </div>
 
     <script src="shell.js"></script>

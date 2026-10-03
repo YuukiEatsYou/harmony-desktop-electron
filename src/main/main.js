@@ -1,7 +1,8 @@
 'use strict';
 
 const path = require('node:path');
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, ipcMain } = require('electron');
+const { ServerStore } = require('./servers');
 
 /**
  * The renderer asks for webviews, so we never trust the attributes it sets.
@@ -57,12 +58,27 @@ function createWindow() {
 }
 
 void app.whenReady().then(() => {
+  const store = new ServerStore(app.getPath('userData'));
+  registerServerIpc(store);
   createWindow();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 });
+
+/**
+ * The server-management surface the renderer is allowed to call. Every handler
+ * returns a plain value so a rejected promise (and its Electron stack noise)
+ * never crosses the bridge.
+ *
+ * @param {import('./servers').ServerStore} store
+ */
+function registerServerIpc(store) {
+  ipcMain.handle('servers:list', () => store.list());
+  ipcMain.handle('servers:add', (_event, input) => store.add(input ?? {}));
+  ipcMain.handle('servers:remove', (_event, id) => store.remove(String(id)));
+}
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
