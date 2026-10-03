@@ -16,7 +16,10 @@
     "smoke": "electron scripts/smoke.js",
     "test": "node scripts/store-test.js && node scripts/harmony-test.js",
     "pack": "electron-builder --dir",
-    "dist": "electron-builder"
+    "dist": "electron-builder",
+    "dist:linux": "electron-builder --linux",
+    "dist:win": "electron-builder --win",
+    "dist:mac": "electron-builder --mac"
   },
   "devDependencies": {
     "electron": "^44.5.1",

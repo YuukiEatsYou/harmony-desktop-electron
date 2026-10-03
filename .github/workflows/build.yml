@@ -1,0 +1,60 @@
+name: Build
+
+# Windows installers need Wine when cross-built from Linux, and macOS installers
+# can only be built on macOS. Running each platform on its own native runner
+# avoids both problems.
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux
+            os: ubuntu-latest
+            script: dist:linux
+            artifacts: |
+              release/*.AppImage
+              release/*.deb
+          - name: Windows
+            os: windows-latest
+            script: dist:win
+            artifacts: |
+              release/*.exe
+          - name: macOS
+            os: macos-latest
+            script: dist:mac
+            artifacts: |
+              release/*.dmg
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm test
+
+      - name: Build installers
+        run: npm run ${{ matrix.script }}
+        env:
+          # No signing certificates are configured, so stop electron-builder
+          # from hunting for one (which fails on macOS runners).
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: harmony-${{ matrix.name }}
+          path: ${{ matrix.artifacts }}
+          if-no-files-found: error

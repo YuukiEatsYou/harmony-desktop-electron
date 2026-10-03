@@ -62,12 +62,45 @@ npx electron scripts/smoke.js --no-sandbox --disable-gpu --in-process-gpu
 ## Building installers
 
 ```sh
-npm run pack   # unpacked app in release/
-npm run dist   # installers: AppImage + deb on Linux, dmg on macOS, nsis on Windows
+npm run pack        # unpacked app in release/, for the current platform
+npm run dist        # installers for the current platform
+npm run dist:linux  # AppImage + deb
+npm run dist:win    # NSIS installer
+npm run dist:mac    # dmg
 ```
 
 The app icon is `build/icon.png`; electron-builder derives the platform icons
-from it. Output lands in `release/`.
+from it. Output lands in `release/` (git-ignored). Artifacts are unsigned.
+
+**Cross-building.** Only the Linux targets build cleanly on a Linux host. The
+Windows installer step runs `signtool`/resource editing through Wine even when
+unsigned, so `npm run dist:win` on Linux fails with `wine process failed ENOENT`
+unless [Wine](https://www.winehq.org/) is installed (`sudo pacman -S wine` on
+Arch/CachyOS). A macOS `dmg` can only be built on macOS.
+
+The straightforward way to get all three is the
+[`Build` workflow](.github/workflows/build.yml): it runs each platform on its
+own native runner, uploads the installers as artifacts, and is what you would
+extend if you later add code signing. No Wine, no cross-tooling.
+
+## Known advisories
+
+`npm audit` reports eight high-severity entries after a dev install. They are a
+single advisory — `GHSA-ch52-4w7c-c8xp`, *http-cache-semantics max-stale
+handling can disclose cross-user cached responses* — fanned out across
+`electron-builder`'s download tooling:
+
+```
+electron-builder → app-builder-lib → @electron/get → got → cacheable-request
+                 → http-cache-semantics
+```
+
+It is **build-time only**. `electron-builder` is a dev dependency, nothing from
+`node_modules` ships in the app (the packaged `app.asar` holds just
+`package.json` and `src/`), and `npm audit --omit=dev` reports nothing. The
+advisory is unpatched upstream — `4.2.0` is the newest release and is still in
+range — so `npm audit fix` only offers to *downgrade* `electron-builder`. Leave
+it, and re-check with `npm audit` before cutting a release.
 
 ## Where your data lives
 
