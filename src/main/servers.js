@@ -63,21 +63,22 @@ function isServer(value) {
   );
 }
 
-/** Owns the persisted list of servers in a single JSON file. */
+/** Owns the persisted list of servers and the last-active one, in one JSON file. */
 class ServerStore {
   /** @type {string} */
   #file;
   /** @type {Server[]} */
-  #servers;
+  #servers = [];
+  /** @type {string | null} */
+  #lastActiveId = null;
 
   /** @param {string} directory */
   constructor(directory) {
     this.#file = path.join(directory, 'servers.json');
-    this.#servers = this.#read();
+    this.#load();
   }
 
-  /** @returns {Server[]} */
-  #read() {
+  #load() {
     let raw;
     try {
       raw = fs.readFileSync(this.#file, 'utf8');
@@ -85,22 +86,33 @@ class ServerStore {
       if (/** @type {NodeJS.ErrnoException} */ (error).code !== 'ENOENT') {
         console.error(`Could not read ${this.#file}:`, error);
       }
-      return [];
+      return;
     }
 
+    let parsed;
     try {
-      const parsed = JSON.parse(raw);
-      if (!parsed || !Array.isArray(parsed.servers)) return [];
-      return parsed.servers.filter(isServer);
+      parsed = JSON.parse(raw);
     } catch (error) {
       console.error(`Could not parse ${this.#file}:`, error);
-      return [];
+      return;
     }
+
+    if (!parsed || !Array.isArray(parsed.servers)) return;
+    this.#servers = parsed.servers.filter(isServer);
+    const lastActive = parsed.lastActiveId;
+    this.#lastActiveId =
+      typeof lastActive === 'string' && this.#servers.some((server) => server.id === lastActive)
+        ? lastActive
+        : null;
   }
 
   /** Atomic write: a crash mid-save must not leave a half-written file. */
   #write() {
-    const payload = JSON.stringify({ version: FILE_VERSION, servers: this.#servers }, null, 2);
+    const payload = JSON.stringify(
+      { version: FILE_VERSION, servers: this.#servers, lastActiveId: this.#lastActiveId },
+      null,
+      2,
+    );
     const temporary = `${this.#file}.tmp`;
     fs.mkdirSync(path.dirname(this.#file), { recursive: true });
     fs.writeFileSync(temporary, payload);
@@ -168,6 +180,27 @@ class ServerStore {
     return { ok: true, server: { ...server } };
   }
 
+  /** @returns {string | null} */
+  getLastActiveId() {
+    return this.#lastActiveId;
+  }
+
+  /**
+   * Remember which server to show on next launch. An id that is not a known
+   * server (or null) clears the selection.
+   *
+   * @param {string | null} id
+   * @returns {boolean} always true, so the renderer can fire and forget.
+   */
+  setLastActiveId(id) {
+    const next =
+      typeof id === 'string' && this.#servers.some((server) => server.id === id) ? id : null;
+    if (next === this.#lastActiveId) return true;
+    this.#lastActiveId = next;
+    this.#write();
+    return true;
+  }
+
   /**
    * @param {string} id
    * @returns {boolean} true when a server was removed.
@@ -176,6 +209,7 @@ class ServerStore {
     const before = this.#servers.length;
     this.#servers = this.#servers.filter((server) => server.id !== id);
     if (this.#servers.length === before) return false;
+    if (this.#lastActiveId === id) this.#lastActiveId = null;
     this.#write();
     return true;
   }

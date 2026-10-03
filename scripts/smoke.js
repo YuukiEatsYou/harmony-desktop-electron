@@ -23,9 +23,11 @@ const PNG_1X1 = Buffer.from(
   'base64',
 );
 
+// The unread channel is what the shell's injected observer counts, so the guest
+// reports a badge of 1.
 const PAGE_HTML =
   '<!doctype html><html><head><title>Fake Harmony</title></head>' +
-  '<body><h1>fake</h1></body></html>';
+  '<body><div class="channel unread"></div></body></html>';
 
 const hits = { meta: 0, icon: 0, page: 0 };
 const fakeServer = http.createServer((request, response) => {
@@ -65,10 +67,10 @@ function fail(message) {
 // Catch renderer errors from the moment the window's contents exist, so early
 // load failures (including a broken icon or webview URL) are not missed.
 app.on('web-contents-created', (_event, contents) => {
-  contents.on('console-message', (event, level, message) => {
-    const text = typeof message === 'string' ? message : event.message;
-    const severity = typeof level === 'number' ? level : event.level;
-    if (severity === 'error' || severity === 3) fail(`renderer console error: ${text}`);
+  contents.on('console-message', (event) => {
+    if (event.level === 'error' || event.level === 3) {
+      fail(`renderer console error: ${event.message}`);
+    }
   });
   contents.on('did-fail-load', (_event, code, description) => {
     fail(`did-fail-load ${code} ${description}`);
@@ -150,6 +152,12 @@ function driveShell(baseUrl) {
     const src = view.getAttribute('src');
     const active = getComputedStyle(view).visibility === 'visible';
 
+    // The injected observer mirrors unread channels into the title, which the
+    // shell turns into a rail badge.
+    await waitFor(() => document.querySelector('#server-list .rail-badge'));
+    const badgeText = document.querySelector('#server-list .rail-badge')?.textContent ?? null;
+    const persistedActive = await window.shell.servers.active();
+
     // Partition isolation: two guests, same origin, separate cookie jars.
     const makeView = (partitionName) => new Promise((resolve, reject) => {
       const element = document.createElement('webview');
@@ -190,6 +198,9 @@ function driveShell(baseUrl) {
       partition,
       src,
       active,
+      badgeText,
+      persistedActive,
+      serverId: server ? server.id : null,
       isolated,
       isoError,
       expectedPartition: server ? 'persist:harmony-' + server.id : null,
@@ -224,7 +235,13 @@ void app.whenReady().then(async () => {
   if (!result.emptyVisibleBefore) fail('empty state was not visible before adding');
   if (!result.dialogOpen) fail('add dialog did not open');
   if (!result.loaded) fail('server webview never finished loading');
-  if (result.guestTitle !== 'Fake Harmony') fail(`unexpected guest title: ${result.guestTitle}`);
+  if (result.guestTitle !== '(1) Fake Harmony') {
+    fail(`unexpected guest title: ${result.guestTitle}`);
+  }
+  if (result.badgeText !== '1') fail(`unexpected rail badge: ${result.badgeText}`);
+  if (result.persistedActive !== result.serverId) {
+    fail(`active server was not persisted: ${result.persistedActive}`);
+  }
   if (result.partition !== result.expectedPartition) {
     fail(`wrong partition: ${result.partition} (expected ${result.expectedPartition})`);
   }

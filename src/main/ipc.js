@@ -2,7 +2,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { ipcMain } = require('electron');
+const { ipcMain, Menu, clipboard, BrowserWindow } = require('electron');
 const { normalizeUrl } = require('./servers');
 const { fetchMeta, fetchIcon } = require('./harmony');
 
@@ -18,6 +18,51 @@ function registerIpc(store, iconsDir) {
   ipcMain.handle('servers:list', () => store.list());
   ipcMain.handle('servers:remove', (_event, id) => removeServer(store, id));
   ipcMain.handle('servers:add', (_event, input) => addServer(store, iconsDir, input ?? {}));
+  ipcMain.handle('servers:active', () => store.getLastActiveId());
+  ipcMain.handle('servers:set-active', (_event, id) =>
+    store.setLastActiveId(id == null ? null : String(id)),
+  );
+  ipcMain.handle('servers:menu', (event, input) => showServerMenu(store, event, input ?? {}));
+}
+
+/**
+ * A native context menu for a rail entry. Resolves with the chosen action, or
+ * null when the menu is dismissed. Copying the address happens here; the
+ * renderer handles reload and remove.
+ *
+ * @param {import('./servers').ServerStore} store
+ * @param {Electron.IpcMainInvokeEvent} event
+ * @param {{ id?: string, hasView?: boolean }} input
+ * @returns {Promise<'reload' | 'copy-url' | 'remove' | null>}
+ */
+function showServerMenu(store, event, input) {
+  return new Promise((resolve) => {
+    const server = store.get(String(input.id));
+    if (!server) {
+      resolve(null);
+      return;
+    }
+
+    const menu = Menu.buildFromTemplate([
+      { label: 'Reload', enabled: Boolean(input.hasView), click: () => resolve('reload') },
+      {
+        label: 'Copy server address',
+        click: () => {
+          clipboard.writeText(server.url);
+          resolve('copy-url');
+        },
+      },
+      { type: 'separator' },
+      { label: 'Remove server', click: () => resolve('remove') },
+    ]);
+
+    menu.popup({
+      window: BrowserWindow.fromWebContents(event.sender) ?? undefined,
+      // Fires when the menu closes without a choice, or after one already
+      // resolved this promise (a second resolve is a no-op).
+      callback: () => resolve(null),
+    });
+  });
 }
 
 /**

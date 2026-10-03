@@ -77,6 +77,27 @@ try {
   assert.equal(reopened.list().length, 1);
   assert.equal(reopened.list()[0].name, 'My Server');
 
+  // --- Last active server ---------------------------------------------------
+  const remaining = reopened.list()[0];
+  assert.equal(reopened.getLastActiveId(), null);
+  assert.equal(reopened.setLastActiveId(remaining.id), true);
+  assert.equal(reopened.getLastActiveId(), remaining.id);
+
+  // An unknown id clears the selection rather than storing nonsense.
+  assert.equal(reopened.setLastActiveId('nope'), true);
+  assert.equal(reopened.getLastActiveId(), null);
+
+  // Removing the selected server also clears the selection.
+  reopened.setLastActiveId(remaining.id);
+  assert.equal(reopened.remove(remaining.id), true);
+  assert.equal(reopened.getLastActiveId(), null);
+
+  // It survives a reopen.
+  const readded = reopened.add({ url: 'chat.example.com' });
+  assert.equal(readded.ok, true);
+  reopened.setLastActiveId(readded.server.id);
+  assert.equal(new ServerStore(directory).getLastActiveId(), readded.server.id);
+
   // A corrupt file must not crash the store.
   fs.writeFileSync(path.join(directory, 'servers.json'), '{ not json');
   assert.deepEqual(new ServerStore(directory).list(), []);

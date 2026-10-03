@@ -8,17 +8,52 @@
 
 /** @typedef {{ id: string, url: string, name: string, iconHash: string | null, iconPath: string | null }} Server */
 
-/** @type {Server[]} */
-let servers = [];
-
 /** @type {string | null} */
 let activeId = null;
+
+/** @type {Server[]} */
+let servers = [];
 
 /** @type {Map<string, any>} server id -> <webview> element */
 const webviews = new Map();
 
 /** Ids whose webview failed to load and needs a retry. @type {Set<string>} */
 const failed = new Set();
+
+/** Unread channel counts reported by each guest. @type {Map<string, number>} */
+const unread = new Map();
+
+/**
+ * Injected into each guest on load. Harmony has no title or badge of its own,
+ * but it marks unread channels with `.channel.unread`, so we mirror that count
+ * into `document.title`, which the shell reads back via `page-title-updated`.
+ */
+const UNREAD_SCRIPT = `(() => {
+  if (window.__harmonyUnread) return;
+  window.__harmonyUnread = true;
+  const base = document.title || location.host;
+  let last = -1;
+  let scheduled = false;
+  const update = () => {
+    scheduled = false;
+    const count = document.querySelectorAll('.channel.unread').length;
+    if (count === last) return;
+    last = count;
+    document.title = count > 0 ? '(' + count + ') ' + base : base;
+  };
+  const schedule = () => {
+    if (scheduled) return;
+    scheduled = true;
+    requestAnimationFrame(update);
+  };
+  update();
+  new MutationObserver(schedule).observe(document.documentElement, {
+    subtree: true,
+    childList: true,
+    attributes: true,
+    attributeFilter: ['class'],
+  });
+})()`;
 
 const listElement = document.getElementById('server-list');
 const emptyState = document.getElementById('empty-state');
@@ -61,6 +96,19 @@ function ensureWebview(server) {
   view.setAttribute('partition', `persist:harmony-${server.id}`);
   view.setAttribute('src', server.url);
 
+  view.addEventListener('dom-ready', () => {
+    view.executeJavaScript(UNREAD_SCRIPT).catch(() => {});
+  });
+
+  view.addEventListener('page-title-updated', (event) => {
+    const match = /^\((\d+)\)\s+/.exec(event.title ?? '');
+    const count = match ? Number(match[1]) : 0;
+    if (count === (unread.get(server.id) ?? 0)) return;
+    if (count > 0) unread.set(server.id, count);
+    else unread.delete(server.id);
+    render();
+  });
+
   view.addEventListener('did-start-loading', () => {
     if (failed.delete(server.id)) render();
   });
@@ -90,6 +138,10 @@ function hideLoadError() {
 function render() {
   listElement.replaceChildren();
 
+  // Mount every server, not just the active one: background guests keep their
+  // gateway open and report unread, which is the point of the rail badges.
+  for (const server of servers) void ensureWebview(server);
+
   for (const server of servers) {
     const item = document.createElement('li');
     item.className = 'rail-item';
@@ -112,17 +164,23 @@ function render() {
     button.addEventListener('click', () => select(server.id));
     button.addEventListener('contextmenu', (event) => {
       event.preventDefault();
-      void removeServer(server);
+      void openServerMenu(server);
     });
 
     item.append(button);
+
+    const count = unread.get(server.id) ?? 0;
+    if (count > 0) {
+      const badge = document.createElement('span');
+      badge.className = 'rail-badge';
+      badge.textContent = count > 99 ? '99+' : String(count);
+      item.append(badge);
+    }
+
     listElement.append(item);
   }
 
   const active = servers.find((server) => server.id === activeId) ?? null;
-
-  // Mount first: a freshly created webview still needs its active class.
-  if (active) void ensureWebview(active);
 
   for (const [id, view] of webviews) {
     view.classList.toggle('is-active', id === activeId);
@@ -146,12 +204,18 @@ function render() {
 function select(id) {
   activeId = id;
   render();
+  void window.shell.servers.setActive(id);
 }
 
-/** @param {Server} server */
-async function removeServer(server) {
-  const confirmed = window.confirm(`Remove “${server.name}” from your servers?`);
-  if (!confirmed) return;
+/**
+ * @param {Server} server
+ * @param {{ confirm?: boolean }} [options]
+ */
+async function removeServer(server, options = {}) {
+  if (options.confirm !== false) {
+    const confirmed = window.confirm(`Remove “${server.name}” from your servers?`);
+    if (!confirmed) return;
+  }
 
   await window.shell.servers.remove(server.id);
 
@@ -159,9 +223,23 @@ async function removeServer(server) {
   webviews.get(server.id)?.remove();
   webviews.delete(server.id);
   failed.delete(server.id);
+  unread.delete(server.id);
 
   if (activeId === server.id) activeId = servers[0]?.id ?? null;
   render();
+  void window.shell.servers.setActive(activeId);
+}
+
+/** @param {Server} server */
+async function openServerMenu(server) {
+  const hasView = webviews.has(server.id);
+  const action = await window.shell.servers.showMenu({ id: server.id, hasView });
+
+  if (action === 'reload') {
+    webviews.get(server.id)?.reload();
+  } else if (action === 'remove') {
+    await removeServer(server);
+  }
 }
 
 function openDialog() {
@@ -228,9 +306,17 @@ document.getElementById('add-server').addEventListener('click', openDialog);
 document.getElementById('empty-add').addEventListener('click', openDialog);
 
 async function start() {
-  servers = await window.shell.servers.list();
-  if (servers.length > 0) activeId = servers[0].id;
+  const [list, lastActive] = await Promise.all([
+    window.shell.servers.list(),
+    window.shell.servers.active(),
+  ]);
+  servers = list;
+
+  const restored = servers.find((server) => server.id === lastActive);
+  activeId = (restored ?? servers[0])?.id ?? null;
+
   render();
+  if (activeId) void window.shell.servers.setActive(activeId);
 }
 
 void start();

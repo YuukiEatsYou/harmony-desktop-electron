@@ -18,5 +18,8 @@ contextBridge.exposeInMainWorld('shell', {
     list: () => ipcRenderer.invoke('servers:list'),
     add: (input) => ipcRenderer.invoke('servers:add', input),
     remove: (id) => ipcRenderer.invoke('servers:remove', id),
+    active: () => ipcRenderer.invoke('servers:active'),
+    setActive: (id) => ipcRenderer.invoke('servers:set-active', id),
+    showMenu: (input) => ipcRenderer.invoke('servers:menu', input),
   },
 });
