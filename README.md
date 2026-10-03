@@ -83,6 +83,24 @@ The straightforward way to get all three is the
 own native runner, uploads the installers as artifacts, and is what you would
 extend if you later add code signing. No Wine, no cross-tooling.
 
+## Releasing
+
+Version numbers come from `package.json`, and they are embedded in the installer
+filenames, so bump the version before tagging. `npm version` updates
+`package.json` and `package-lock.json` for you:
+
+```sh
+npm version 0.2.0 --no-git-tag-version
+git commit -am "Release 0.2.0"
+git tag v0.2.0
+git push origin main v0.2.0
+```
+
+The `Build` workflow runs on the `v*` tag, builds each platform on its native
+runner, and publishes a GitHub Release with every installer attached. A manual
+run from the Actions tab only builds, leaving the files as run artifacts and
+creating no release.
+
 ## Known advisories
 
 `npm audit` reports eight high-severity entries after a dev install. They are a
