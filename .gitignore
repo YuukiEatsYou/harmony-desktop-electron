@@ -1,0 +1,19 @@
+# Vendored Harmony source tree. We develop against it locally but do not
+# commit it; the desktop client is a separate program.
+harmony/
+
+# Dependencies and build output.
+node_modules/
+dist/
+out/
+release/
+
+# Logs and local environment overrides.
+*.log
+.env
+.env.*
+
+# Editor / OS cruft.
+.DS_Store
+.idea/
+.vscode/
