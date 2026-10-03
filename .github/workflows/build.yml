@@ -51,6 +51,8 @@ jobs:
 
       - run: npm test
 
+      # The dist scripts pass --publish never: electron-builder must not try to
+      # publish (it would demand GH_TOKEN). The release job attaches the files.
       - name: Build installers
         run: npm run ${{ matrix.script }}
         env:
