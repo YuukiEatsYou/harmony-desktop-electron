@@ -250,11 +250,12 @@ body.modal-open .server-webview {
   margin: 0;
 }
 
-/* --- Add-server dialog --------------------------------------------------- */
+/* --- Dialogs ------------------------------------------------------------- */
 
 .dialog-backdrop {
   position: fixed;
   inset: 0;
+  z-index: 10;
   background: rgb(0 0 0 / 55%);
   display: flex;
   align-items: center;
@@ -327,6 +328,56 @@ body.modal-open .server-webview {
 
 .ghost-button:hover {
   text-decoration: underline;
+}
+
+/* --- Screen-share picker ------------------------------------------------- */
+
+.picker {
+  width: 640px;
+  max-width: calc(100vw - 48px);
+}
+
+.picker-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  max-height: 55vh;
+  overflow-y: auto;
+  margin: 4px 0;
+}
+
+.picker-source {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px;
+  border: 1px solid #3a3d43;
+  border-radius: 8px;
+  background: #1a1b1e;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.picker-source:hover {
+  border-color: var(--accent);
+}
+
+.picker-source img {
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  object-fit: contain;
+  border-radius: 4px;
+  background: #000;
+  display: block;
+}
+
+.picker-source .picker-source-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 [hidden] {

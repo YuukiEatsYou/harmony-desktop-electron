@@ -55,7 +55,11 @@
       "target": [
         "dmg"
       ],
-      "category": "public.app-category.social-networking"
+      "category": "public.app-category.social-networking",
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "Harmony uses your microphone when you join a voice channel.",
+        "NSCameraUsageDescription": "Harmony uses your camera when you share video."
+      }
     }
   }
 }

@@ -65,6 +65,9 @@ const loadError = document.getElementById('load-error');
 const loadErrorName = document.getElementById('load-error-name');
 const loadErrorMessage = document.getElementById('load-error-message');
 
+const screenPicker = document.getElementById('screen-picker');
+const screenSources = document.getElementById('screen-sources');
+
 const dialogBackdrop = document.getElementById('dialog-backdrop');
 const addForm = document.getElementById('add-form');
 const urlInput = document.getElementById('server-url');
@@ -300,8 +303,64 @@ dialogBackdrop.addEventListener('mousedown', (event) => {
 });
 
 document.addEventListener('keydown', (event) => {
-  if (event.key === 'Escape' && !dialogBackdrop.hidden) closeDialog();
+  if (event.key !== 'Escape') return;
+  if (!screenPicker.hidden) closeScreenPicker(null);
+  else if (!dialogBackdrop.hidden) closeDialog();
 });
+
+/* --- Screen-share picker ------------------------------------------------- */
+
+/** @type {number | null} */
+let pickerRequestId = null;
+
+/** @param {{ requestId: number, sources: Array<{ id: string, name: string, kind: string, thumbnail: string | null }> }} payload */
+function openScreenPicker(payload) {
+  pickerRequestId = payload.requestId;
+  screenSources.replaceChildren();
+
+  for (const source of payload.sources) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'picker-source';
+
+    if (source.thumbnail) {
+      const image = document.createElement('img');
+      image.src = source.thumbnail;
+      image.alt = '';
+      button.append(image);
+    }
+
+    const label = document.createElement('span');
+    label.className = 'picker-source-name';
+    label.textContent = source.name || source.kind;
+    button.append(label);
+
+    button.addEventListener('click', () => closeScreenPicker(source.id));
+    screenSources.append(button);
+  }
+
+  screenPicker.hidden = false;
+  document.body.classList.add('modal-open');
+}
+
+/** @param {string | null} sourceId */
+function closeScreenPicker(sourceId) {
+  screenPicker.hidden = true;
+  document.body.classList.remove('modal-open');
+  const requestId = pickerRequestId;
+  pickerRequestId = null;
+  if (requestId !== null) window.shell.display.reply(requestId, sourceId);
+}
+
+document.getElementById('screen-picker-cancel').addEventListener('click', () => {
+  closeScreenPicker(null);
+});
+
+screenPicker.addEventListener('mousedown', (event) => {
+  if (event.target === screenPicker) closeScreenPicker(null);
+});
+
+void window.shell.display.onPick((payload) => openScreenPicker(payload));
 
 document.getElementById('add-server').addEventListener('click', openDialog);
 document.getElementById('empty-add').addEventListener('click', openDialog);

@@ -5,12 +5,19 @@ const path = require('node:path');
 const { app, BrowserWindow, Menu, protocol, shell } = require('electron');
 const { ServerStore } = require('./servers');
 const { registerIpc } = require('./ipc');
+const { registerDisplayMediaHandler } = require('./display');
 
 const ICON_SCHEME = 'harmony-icon';
 
-// Permissions a loaded server may have. Everything else (camera, microphone,
-// geolocation, ...) is refused: a chat server has no business asking.
-const ALLOWED_PERMISSIONS = new Set(['notifications']);
+// Permissions a loaded server may have. `media` covers the microphone for voice
+// channels and `display-capture` the screen share; both are reached from a click
+// the member made. Anything else (geolocation, midi, usb, ...) is refused.
+const ALLOWED_PERMISSIONS = new Set(['notifications', 'media', 'display-capture']);
+
+/** @param {string} permission */
+function isAllowed(permission) {
+  return ALLOWED_PERMISSIONS.has(permission);
+}
 
 // Must run before the app is ready. Marking the scheme standard and secure lets
 // it behave like http for the renderer and satisfy the page's CSP.
@@ -29,10 +36,14 @@ app.on('web-contents-created', (_event, contents) => {
 });
 
 // Every session includes the per-server partitions, so this covers them all.
+// A permission check runs first and a request is only made if it is denied, so
+// both handlers must agree.
 app.on('session-created', (session) => {
+  session.setPermissionCheckHandler((_contents, permission) => isAllowed(permission));
   session.setPermissionRequestHandler((_contents, permission, callback) => {
-    callback(ALLOWED_PERMISSIONS.has(permission));
+    callback(isAllowed(permission));
   });
+  registerDisplayMediaHandler(session);
 });
 
 /**

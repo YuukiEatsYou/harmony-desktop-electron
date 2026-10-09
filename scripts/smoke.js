@@ -35,13 +35,24 @@ const PNG_1X1 = Buffer.from(
 );
 
 // One channel that is merely unread, and one holding an unread mention or
-// reply. The shell's injected observer counts only the latter, so the guest
-// must report a badge of 1 (not 2).
+// reply, so the shell's injected observer reports a badge of 1 (not 2). The
+// page also probes the microphone, to prove voice's `media` permission is not
+// denied (a machine with no audio device yields NotFoundError, not a denial).
 const PAGE_HTML =
   '<!doctype html><html><head><title>Fake Harmony</title></head><body>' +
   '<div class="channel unread"></div>' +
   '<div class="channel unread"><span class="mention-dot"></span></div>' +
-  '</body></html>';
+  '<script>' +
+  'window.__media = {};' +
+  '(async () => {' +
+  '  try { const s = await navigator.mediaDevices.getUserMedia({ audio: true });' +
+  '    s.getTracks().forEach((t) => t.stop()); window.__media.micError = null; }' +
+  '  catch (error) { window.__media.micError = error.name; }' +
+  '  try { const p = await navigator.permissions.query({ name: "microphone" });' +
+  '    window.__media.micPermission = p.state; }' +
+  '  catch (error) { window.__media.micPermission = "error:" + error.name; }' +
+  '})();' +
+  '</script></body></html>';
 
 const hits = { meta: 0, icon: 0, page: 0 };
 const fakeServer = http.createServer((request, response) => {
@@ -172,6 +183,13 @@ function driveShell(baseUrl) {
     const badgeText = document.querySelector('#server-list .rail-badge')?.textContent ?? null;
     const persistedActive = await window.shell.servers.active();
 
+    let media = null;
+    for (let attempt = 0; attempt < 100 && !media; attempt += 1) {
+      const state = await guestEval('media', view, 'window.__media || null');
+      if (state && state.micPermission !== undefined) media = state;
+      else await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+
     // Partition isolation: two guests, same origin, separate cookie jars.
     const makeView = (partitionName) => new Promise((resolve, reject) => {
       const element = document.createElement('webview');
@@ -214,6 +232,7 @@ function driveShell(baseUrl) {
       active,
       badgeText,
       persistedActive,
+      media,
       serverId: server ? server.id : null,
       isolated,
       isoError,
@@ -267,6 +286,9 @@ void app.whenReady().then(async () => {
   if (result.persistedActive !== result.serverId) {
     fail(`active server was not persisted: ${result.persistedActive}`);
   }
+  const media = result.media ?? {};
+  if (media.micPermission === 'denied') fail('microphone permission was denied');
+  if (media.micError === 'NotAllowedError') fail('getUserMedia was blocked by the client');
   if (result.partition !== result.expectedPartition) {
     fail(`wrong partition: ${result.partition} (expected ${result.expectedPartition})`);
   }

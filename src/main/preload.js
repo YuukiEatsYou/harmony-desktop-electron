@@ -22,4 +22,14 @@ contextBridge.exposeInMainWorld('shell', {
     setActive: (id) => ipcRenderer.invoke('servers:set-active', id),
     showMenu: (input) => ipcRenderer.invoke('servers:menu', input),
   },
+  display: {
+    /** Asked to show the screen-share picker; returns an unsubscribe function. */
+    onPick: (handler) => {
+      const listener = (_event, payload) => handler(payload);
+      ipcRenderer.on('display:pick', listener);
+      return () => ipcRenderer.removeListener('display:pick', listener);
+    },
+    /** Answer a picker request with a source id, or null when cancelled. */
+    reply: (requestId, sourceId) => ipcRenderer.send('display:picked', requestId, sourceId),
+  },
 });
